@@ -1,0 +1,67 @@
+services:
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: subnet_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 159357
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+        test: [ "CMD-SHELL", "pg_isready -U postgres -d subnet_db" ]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    command: sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    environment:
+      - REDIS_HOST=redis
+      - DB_HOST=db
+      - DB_NAME=subnet_db
+      - DB_USER=postgres
+      - DB_PASSWORD=159357
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_started
+      db:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+
+  celery_worker:
+    build: .
+    command: celery -A subnet_ping_prj worker --loglevel=info -P threads
+    volumes:
+      - .:/app
+    depends_on:
+        redis:
+          condition: service_started
+        db:
+          condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - DB_HOST=db
+      - DB_NAME=subnet_db
+      - DB_USER=postgres
+      - DB_PASSWORD=159357
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+volumes:
+    postgres_data:

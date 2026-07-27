@@ -1,0 +1,35 @@
+# Python temporary and merged files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+#Virtual Environment / venv
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# PyCharm / VS Code
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker and Temporary Logs
+*.log
+docker-compose.override.yml
+.pgdata/
+pgdata/
+
+# Environmental Variables and Confidential Information
+.env
+.env.local
+
+# Database and Test Outputs
+.coverage
+htmlcov/
+.pytest_cache/
