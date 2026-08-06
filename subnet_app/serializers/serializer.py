@@ -26,4 +26,4 @@ class SubnetQueryLogSerializer(serializers.ModelSerializer):
     results = PingResultSerializer(many=True, read_only=True)
     class Meta:
         model= SubnetQueryLog
-        fields = ['id','subnet_input', 'created_at', 'results']
+        fields = ['id','subnet_input', 'created_at','status', 'results']

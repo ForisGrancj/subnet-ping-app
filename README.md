@@ -1,9 +1,11 @@
-# 🌐 Subnet Ping & Query Logger Service
-> *An asynchronous microservice for scanning CIDR subnets, monitoring host availability via ICMP, and caching real-time network states using Django, Celery, Redis, and PostgreSQL.*
+# Subnet Ping & Query Logger Service
+> *An asynchronous microservice for scanning CIDR subnets, 
+> monitoring host availability via ICMP, and caching real-time 
+> network states using Django, Celery, Redis, and PostgreSQL.*
 
 ---
 
-## 📖 About
+## About
 
 When managing modern network infrastructure, scanning large IP ranges synchronously can lead to high latency, server
 timeouts, and poor user experience.
@@ -15,18 +17,98 @@ and caches responses for high-speed retrieval.
 
 ---
 
-## ✨ Features
+## Features
 
+* **Multi-Tiered Query Resolution:** Redis-First $\rightarrow$ Database Fallback $\rightarrow$ Celery Worker Execution flow for minimum latency.
+* **Smart Caching Layer:** Caches query results in Redis for 1 hour (3600s) to eliminate redundant network scans.
+* **Optimized Log API:** Employs `prefetch_related` on `query_id` lookups to eliminate N+1 SQL queries.
 * **Asynchronous Task Processing:** Non-blocking API execution using Celery workers and Redis message broker.
-* **Smart Caching Layer:** Caches query results in Redis for 1 hour (3600s) to minimize unnecessary database reads and network scans.
-* **Efficient Bulk Writes:** Writes all host ping statuses into PostgreSQL using `bulk_create` to optimize DB I/O performance.
+* **Efficient Bulk Writes:** Bulk-inserts ping outcomes into PostgreSQL (`PingResultLog`) via `bulk_create`.
 * **ICMP Network Monitoring:** Powered by `icmplib` and `ipaddress` for reliable, low-overhead IP availability checks.
-* **Dockerized Architecture:** Entire stack (Django, Celery, Redis, PostgreSQL) is containerized with custom healthcheck dependency management.
-* **Production-Ready Admin Interface:** Fully registered models in Django Admin for visual network log tracking.
+* **Dockerized Architecture:** Entire stack (Django, Celery, Redis, PostgreSQL) is containerized with healthcheck-based dependency management.
 
 ---
+## API Endpoints & Usage
 
-## 📁 Project Directory Structure
+| Method | Endpoint | Description | Key Parameters |
+| :--- | :--- | :--- | :--- |
+| **`POST`** | `/ping/` | Triggers a new subnet ICMP scan or returns cached/historical results. | `subnet_value`, `subnet`, or `subnet_input` (JSON body) |
+| **`GET`** | `/logs/` | Lists query history or fetches a specific log by `query_id` or `subnet`. | `query_id` or `subnet` / `subnet_value` (URL query parameters) |
+
+### 1. Execute Subnet Scan (`POST /ping/`)
+
+Creates a new background scan task or fetches results from **Redis Cache** / **PostgreSQL Fallback**.
+
+**Request Payload:**
+``` json
+{
+  "subnet_value": "127.0.0.0/30"
+}
+```
+**cURL Command:**
+``` bash
+curl -X POST http://localhost:8000/ping/ \
+  -H "Content-Type: application/json" \
+  -d '{"subnet_value": "127.0.0.0/30"}'
+## Project Directory Structure
+``` 
+**New Scan Task Created (HTTP 201 Created)**
+``` json
+{
+  "message": "Subnet ping task created successfully.",
+  "id": 43
+}
+```
+**Redis Cache Hit (HTTP 200 OK)**
+``` json
+{
+  "message": "the subnet value is already exist with 42",
+  "source": "Redis Cache",
+  "data": [
+    {
+      "ip_address": "127.0.0.1",
+      "is_active": true,
+      "rtt": 0.45
+    }
+  ]
+}
+```
+### 2.Query Logs & Specific Scan Details (GET /logs/)
+Retrieves historical query logs or fetches details for a specific **query_id** using optimized **prefetch_related** queries.
+
+**Fetch by query_id**
+``` bash
+curl -X GET "http://localhost:8000/logs/?query_id=42"
+```
+**Response (HTTP 200 OK):**
+``` json
+{
+  "source": "Database",
+  "data": {
+    "id": 42,
+    "subnet_input": "127.0.0.0/30",
+    "status": "COMPLETED",
+    "created_at": "2026-08-05T10:15:52Z",
+    "results": [
+      {
+        "ip_address": "127.0.0.1",
+        "is_active": true/false,
+        "rtt": 0.45/null
+      }
+    ]
+  }
+}
+```
+**Fetch by subnet:**
+``` bash
+curl -X GET "http://localhost:8000/logs/?subnet=127.0.0.0/30"
+```
+**Fetch All Logs History:**
+``` bash
+curl -X GET "http://localhost:8000/logs/"
+```
+
+## Project Directory Structure
 
  mermaid
 DjangoProject1/
@@ -44,16 +126,19 @@ DjangoProject1/
 └── subnet_app/                 # Main application directory
     ├── admin.py                # Django Admin panel configuration
     ├── apps.py                 # Application configuration
-    ├── serializers.py          # DRF serializers & IP validations
+    ├── serializers/            # DRF serializers & IP validations
     ├── tasks.py                # Celery async tasks (ICMP Ping logic)
-    ├── views.py                # API views & endpoints
+    ├── views/                  # API views & endpoints (PingCreate, LogList)
     ├── urls.py                 # App-specific URL routes
     └── models/                 # Database models
         ├── __init__.py
-        ├── SubnetQueryLog.py   # Parent query history model
+        ├── SubnetQueryLog.py   # Parent query history model (subnet_input, status)
         └── PingResultLog.py    # Individual IP ping status model
+
+## System Topology & Flow Algorithm
+
 ``` 
-               +-------------------------------------------------+
+              +-------------------------------------------------+
                |                   CLIENT                        |
                |       (Postman / Web Browser / API App)         |
                +-----------------------+-------------------------+
@@ -65,9 +150,9 @@ DjangoProject1/
                |             Port 8000 (Docker)                  |
                |                                                 |
                |            DJANGO REST FRAMEWORK (web)          |
-               |   - Subnet Validation (serializers.py)          |
-               |   - Primary Log Record Creation (views.py)      |
-               |   - Dispatch Async Task (.delay)                |
+               |   1. Check Redis Cache  (cache.get)             |
+               |   2. Check PostgreSQL   (subnet_input fallback) |
+               |   3. Create Record & Dispatch Celery Task       |
                +-------------------+-----------------------------+
                                    |
                   +----------------+----------------+
@@ -79,13 +164,13 @@ DjangoProject1/
      |   REDIS (redis:6379)         |   | POSTGRESQL (db:5432)         |
      |                              |   |                              |
      | - Message Broker (Queue)     |   | - SubnetQueryLog             |
-     | - Result Backend / Cache     |   | - PingResultLog              |
+     | - Result Cache (3600s TTL)   |   | - PingResultLog              |
      +--------------+---------------+   +------------------------------+
                    |                                ^
          Consume Task (Workers)                     |
                   |                          Bulk Write
                   v                                 |
-     +------------------------------------------------+------------+
+     +-------------------------------------------------------------+
      |                  CELERY WORKER (celery_worker)              |
      |                                                             |
      |           - Asynchronous IP Scanning (icmplib)              |                                  
@@ -95,42 +180,56 @@ DjangoProject1/
      +-------------------------------------------------------------+
 ```
 
-## System Topology & Flow Algorithm
-
 ### Execution Sequence Diagram
 ``` mermaid
 sequenceDiagram
     autonumber
     actor Client
-    participant API as Django API (Views/Serializers)
+    participant API as Django API (Views)
+    participant Cache as Redis Cache
     participant DB as PostgreSQL DB
     participant Queue as Redis Queue
     participant Worker as Celery Worker
-    participant Cache as Redis Cache
 
-    Note over Client, API: Step 1 & 2: Validation & Database Logging
-    Client->>API: POST /api/ping/ {"subnet": "192.168.1.0/28"}
-    API->>API: SubnetPingSerializer validates CIDR
-    API->>DB: SubnetQueryLog.objects.create()
-    DB-->>API: Returns query_id
+    Client->>API: POST /ping/ {"subnet_value": "192.168.1.0/28"}
+    
+    rect rgb(235, 245, 255)
+        Note over API, Cache: Step 1: Redis Cache Lookup
+        API->>Cache: cache.get("subnet_scan:192.168.1.0/28")
+        alt Cache Hit
+            Cache-->>API: Returns cached JSON results
+            API-->>Client: 200 OK {"source": "Redis Cache", "data": [...]}
+        end
+    end
 
-    Note over API, Client: Step 3 & 4: Queueing & Immediate Response
-    API->>Queue: process_subnet_ping_task.delay(query_id, subnet)
-    API-->>Client: 202 ACCEPTED {"query_id": query_id}
-
-    Note over Queue, Worker: Step 5: Background Processing
-    Queue->>Worker: Consume ping task
-    Worker->>Worker: Extract IPs & run ICMP ping (icmplib)
-
-    Note over Worker, Cache: Step 6: Bulk Write & Caching
-    Worker->>DB: PingResultLog.objects.bulk_create()
-    Worker->>Cache: cache.set("subnet_logs_{query_id}", TTL: 3600s)
+    rect rgb(255, 245, 235)
+        Note over API, DB: Step 2: PostgreSQL Database Fallback
+        API->>DB: SubnetQueryLog.objects.filter(subnet_input=...)
+        alt DB Match Found
+            DB-->>API: Returns existing SubnetQueryLog (e.g. ID: 42)
+            API->>Cache: Repopulate Redis Cache (TTL: 3600s)
+            API-->>Client: 200 OK {"message": "the subnet value is already exist with 42", "source": "Database Fallback"}
+        end
+    end
+    
+    rect rgb(235, 255, 235)
+        Note over API, Worker: Step 3: Brand New Subnet Scan
+        API->>DB: SubnetQueryLog.objects.create(subnet_input=...)
+        DB-->>API: Returns new record (ID: 43)
+        API->>Queue: process_subnet_ping.delay(43, "192.168.1.0/28")
+        API-->>Client: 201 CREATED {"id": 43, "message": "Subnet ping task created successfully."}
+        
+        Queue->>Worker: Consume async task
+        Worker->>Worker: ICMP Ping Range (icmplib)
+        Worker->>DB: PingResultLog.objects.bulk_create()
+        Worker->>Cache: cache.set("subnet_scan:192.168.1.0/28", results, 3600)
+    end
 ```
 
 ### Execution Steps
-1. **Request & Validation:** Client posts a CIDR network block (e.g. `192.168.1.0/28`). `SubnetPingSerializer` verifies validity.
-2. **Database Logging:** System creates a parent `SubnetQueryLog` record in PostgreSQL and generates a tracking `query_id`.
-3. **Queueing:** Task `process_subnet_ping_task.delay(query_log.id, subnet_str)` is pushed to Redis.
-4. **Immediate Response:** API instantly returns `202 ACCEPTED` status with the `query_id` to prevent client blocking.
-5. **Background Scan:** Celery worker extracts host IP addresses and runs ICMP ping checks (`icmplib.ping`).
-6. **Bulk Insert & Caching:** Worker bulk-saves host statuses to PostgreSQL (`PingResultLog`) and updates the Redis cache key `subnet_logs_{query_id}` (TTL: 1 hour).
+1. **Request Input:** Client sends payload {"subnet_value": "192.168.1.0/28"} to /ping/.
+2. **Redis Cache Check:** The API checks key subnet_scan:<subnet_input>. If found, returns 200 OK with cached hosts instantly.
+3. **Database Fallback:** If cache misses/expires, it queries SubnetQueryLog by subnet_input. If found, re-caches results into Redis and returns existing query ID 200 OK.
+4. **New Task Creation:** If record exists nowhere, creates SubnetQueryLog(subnet_input=...), returns 201 CREATED, and dispatches Celery task.
+5. **Background Scan & Bulk Write:** Celery executes ICMP checks via icmplib, performs bulk_create on PingResultLog, updates log status, and primes Redis cache with a 1-hour TTL.
+6. **Optimized Log Querying:** GET /logs/?query_id=1 fetches query history and pre-fetches nested ping results using prefetch_related('results') for optimal SQL performance.
