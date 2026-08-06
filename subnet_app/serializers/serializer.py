@@ -20,10 +20,10 @@ class SubnetPingSerializer(serializers.Serializer):
 class PingResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = PingResultLog
-        fields = ['ip_address', 'is_active', 'checked_at']
+        fields = ['query_log','ip_address', 'is_active', 'checked_at','rtt']
 
 class SubnetQueryLogSerializer(serializers.ModelSerializer):
     results = PingResultSerializer(many=True, read_only=True)
     class Meta:
         model= SubnetQueryLog
-        fields = ['id', 'subnet_input', 'created_at', 'results']
+        fields = ['id','subnet_input', 'created_at', 'results']
