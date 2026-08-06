@@ -193,37 +193,31 @@ sequenceDiagram
 
     Client->>API: POST /ping/ {"subnet_value": "192.168.1.0/28"}
     
-    rect rgb(235, 245, 255)
-        Note over API, Cache: Step 1: Redis Cache Lookup
-        API->>Cache: cache.get("subnet_scan:192.168.1.0/28")
-        alt Cache Hit
-            Cache-->>API: Returns cached JSON results
-            API-->>Client: 200 OK {"source": "Redis Cache", "data": [...]}
-        end
+    Note over API, Cache: Step 1: Redis Cache Lookup
+    API->>Cache: cache.get("subnet_scan:192.168.1.0/28")
+    alt Cache Hit
+        Cache-->>API: Returns cached JSON results
+        API-->>Client: 200 OK {"source": "Redis Cache", "data": [...]}
     end
 
-    rect rgb(255, 245, 235)
-        Note over API, DB: Step 2: PostgreSQL Database Fallback
-        API->>DB: SubnetQueryLog.objects.filter(subnet_input=...)
-        alt DB Match Found
-            DB-->>API: Returns existing SubnetQueryLog (e.g. ID: 42)
-            API->>Cache: Repopulate Redis Cache (TTL: 3600s)
-            API-->>Client: 200 OK {"message": "the subnet value is already exist with 42", "source": "Database Fallback"}
-        end
+    Note over API, DB: Step 2: PostgreSQL Database Fallback
+    API->>DB: SubnetQueryLog.objects.filter(subnet_input=...)
+    alt DB Match Found
+        DB-->>API: Returns existing SubnetQueryLog (e.g. ID: 42)
+        API->>Cache: Repopulate Redis Cache (TTL: 3600s)
+        API-->>Client: 200 OK {"message": "the subnet value is already exist with 42", "source": "Database Fallback"}
     end
+
+    Note over API, Worker: Step 3: Brand New Subnet Scan
+    API->>DB: SubnetQueryLog.objects.create(subnet_input=...)
+    DB-->>API: Returns new record (ID: 43)
+    API->>Queue: process_subnet_ping.delay(43, "192.168.1.0/28")
+    API-->>Client: 201 CREATED {"id": 43, "message": "Subnet ping task created successfully."}
     
-    rect rgb(235, 255, 235)
-        Note over API, Worker: Step 3: Brand New Subnet Scan
-        API->>DB: SubnetQueryLog.objects.create(subnet_input=...)
-        DB-->>API: Returns new record (ID: 43)
-        API->>Queue: process_subnet_ping.delay(43, "192.168.1.0/28")
-        API-->>Client: 201 CREATED {"id": 43, "message": "Subnet ping task created successfully."}
-        
-        Queue->>Worker: Consume async task
-        Worker->>Worker: ICMP Ping Range (icmplib)
-        Worker->>DB: PingResultLog.objects.bulk_create()
-        Worker->>Cache: cache.set("subnet_scan:192.168.1.0/28", results, 3600)
-    end
+    Queue->>Worker: Consume async task
+    Worker->>Worker: ICMP Ping Range (icmplib)
+    Worker->>DB: PingResultLog.objects.bulk_create()
+    Worker->>Cache: cache.set("subnet_scan:192.168.1.0/28", results, 3600)
 ```
 
 ### Execution Steps
