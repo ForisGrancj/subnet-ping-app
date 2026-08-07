@@ -3,14 +3,16 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.core.cache import cache
-
+from subnet_app.serializers.serializer import SubnetPingSerializer
 from subnet_app.models.SubnetQueryLog import SubnetQueryLog
 from subnet_app.tasks import process_subnet_ping
 
 
 class SubnetPingCreateView(APIView):
     def post(self, request):
-        raw_subnet = request.data.get("subnet") or request.data.get("subnet_value") or request.data.get("subnet_input")
+        serializer = SubnetPingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        raw_subnet = serializer.validated_data.get('subnet_value') or serializer.validated_data.get('subnet_input')
 
         if not raw_subnet:
             return Response(

@@ -4,17 +4,21 @@ from subnet_app.models.SubnetQueryLog import SubnetQueryLog
 from subnet_app.models.PingResultLog import PingResultLog
 
 class SubnetPingSerializer(serializers.Serializer):
-    subnet = serializers.CharField(max_length=50)
+    subnet_value = serializers.CharField(max_length=50)
 
-    def validate_subnet(self, value):
+    def validate_subnet_value(self, value):
+
         try:
             network = ipaddress.ip_network(value, strict=False)
         except ValueError:
-            raise serializers.ValidationError("Invalid IPv4 and IPv6 address!")
-        if network.version == 4 and network.prefixlen <24:
-            raise serializers.ValidationError("For entered Ipv4 the max subnet mask value should be less than 24")
-        if network.version == 6 and network.prefixlen <64:
-            raise serializers.ValidationError("For entered Ipv6 the max subnet mask value should be less than 64")
+            raise serializers.ValidationError("Invalid IPv4 or IPv6 address!")
+
+        if network.version == 4 and network.prefixlen < 24:
+            raise serializers.ValidationError("For entered IPv4, the subnet mask prefix length must be 24 or greater.")
+
+        if network.version == 6 and network.prefixlen < 64:
+            raise serializers.ValidationError("For entered IPv6, the subnet mask prefix length must be 64 or greater.")
+
         return str(network)
 
 class PingResultSerializer(serializers.ModelSerializer):
