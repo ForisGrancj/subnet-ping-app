@@ -61,8 +61,7 @@ Creates a new background scan task or fetches results from **Redis Cache** / **P
 curl -X POST http://localhost:8000/ping/ \
   -H "Content-Type: application/json" \
   -d '{"subnet_value": "127.0.0.0/30"}'
-## Project Directory Structure
-``` 
+```
 **New Scan Task Created (HTTP 201 Created)**
 ``` json
 {
@@ -84,7 +83,7 @@ curl -X POST http://localhost:8000/ping/ \
   ]
 }
 ```
-### 2.Query Logs & Specific Scan Details (GET /logs/)
+### 2. Query Logs & Specific Scan Details (GET /logs/)
 Retrieves historical query logs or fetches details for a specific **query_id** using optimized **prefetch_related** queries.
 
 **Fetch by query_id**
@@ -121,30 +120,31 @@ curl -X GET "http://localhost:8000/logs/"
 
 ## Project Directory Structure
 
- mermaid
-DjangoProject1/
-├── manage.py                   
-├── Dockerfile                  
-├── docker-compose.yml          
+```text
+subnet-ping-app/
+├── manage.py
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example                # Template for required environment variables
 ├── requirements.txt            # Python dependencies
-├── db_dump.sql                 # PostgreSQL database dump file
+├── frontend/                   # React (Vite) web interface
 ├── subnet_ping_prj/            # Project core configuration directory
 │   ├── __init__.py
 │   ├── settings.py             # Global settings (DB, Cache, Apps)
-│   ├── urls.py                 
+│   ├── urls.py
 │   ├── celery.py               # Celery instance setup
-│   └── wsgi.py                 
+│   └── wsgi.py
 └── subnet_app/                 # Main application directory
     ├── admin.py                # Django Admin panel configuration
     ├── apps.py                 # Application configuration
     ├── serializers/            # DRF serializers & IP validations
     ├── tasks.py                # Celery async tasks (ICMP Ping logic)
     ├── views/                  # API views & endpoints (PingCreate, LogList)
-    ├── urls.py                 # App-specific URL routes
     └── models/                 # Database models
         ├── __init__.py
         ├── SubnetQueryLog.py   # Parent query history model (subnet_input, status)
         └── PingResultLog.py    # Individual IP ping status model
+```
 
 ## System Topology & Flow Algorithm
 
