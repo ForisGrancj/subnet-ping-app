@@ -17,6 +17,17 @@ and caches responses for high-speed retrieval.
 
 ---
 
+## Configuration
+
+Secrets are read from environment variables, not stored in the repository.
+
+```bash
+cp .env.example .env   # then set DJANGO_SECRET_KEY and DB_PASSWORD
+docker compose up --build
+```
+
+---
+
 ## Features
 
 * **Multi-Tiered Query Resolution:** Redis-First $\rightarrow$ Database Fallback $\rightarrow$ Celery Worker Execution flow for minimum latency.
